@@ -15,13 +15,13 @@ from urllib3.util.retry import Retry
 
 # 文件配置
 ips = "Fission_ip.txt"
+new_ips = "Fission_ip_new.txt"
 domains = "Fission_domain.txt"
 dns_result = "dns_result.txt"
 
-
 # 并发数配置
-max_workers_request = 20   # 并发请求数量
-max_workers_dns = 50       # 并发DNS查询数量
+max_workers_request = 20  # 并发请求数量
+max_workers_dns = 50  # 并发DNS查询数量
 
 # 生成随机User-Agent
 ua = UserAgent()
@@ -42,6 +42,7 @@ sites_config = {
     }
 }
 
+
 # 设置会话
 def setup_session():
     session = requests.Session()
@@ -51,6 +52,7 @@ def setup_session():
     session.mount('https://', adapter)
     return session
 
+
 # 生成请求头
 def get_headers():
     return {
@@ -58,6 +60,7 @@ def get_headers():
         'Accept': '*/*',
         'Connection': 'keep-alive',
     }
+
 
 # 查询域名的函数，自动重试和切换网站
 def fetch_domains_for_ip(ip_address, session, attempts=0, used_sites=None):
@@ -98,6 +101,7 @@ def fetch_domains_for_ip(ip_address, session, attempts=0, used_sites=None):
         print(f"Error fetching domains for {ip_address} from {site_info['url']}: {e}")
         return fetch_domains_for_ip(ip_address, session, attempts + 1, used_sites)
 
+
 # 并发处理所有IP地址
 def fetch_domains_concurrently(ip_addresses):
     session = setup_session()
@@ -110,11 +114,13 @@ def fetch_domains_concurrently(ip_addresses):
 
     return list(set(domains))
 
+
 # DNS查询函数
 def dns_lookup(domain):
     print(f"Performing DNS lookup for {domain}...")
     result = subprocess.run(["nslookup", domain], capture_output=True, text=True)
     return domain, result.stdout
+
 
 # 通过域名列表获取绑定过的所有ip
 def perform_dns_lookups(domain_filename, result_filename, unique_ipv4_filename):
@@ -150,7 +156,7 @@ def perform_dns_lookups(domain_filename, result_filename, unique_ipv4_filename):
             except ValueError:
                 # 忽略无效IP地址
                 continue
-        
+
         filtered_ipv4_addresses.update(exist_list)
 
         # 保存IPv4地址
@@ -161,13 +167,37 @@ def perform_dns_lookups(domain_filename, result_filename, unique_ipv4_filename):
     except Exception as e:
         print(f"Error performing DNS lookups: {e}")
 
+
+# 过滤IP地址
+def filter_ips(ip_ranges_filename, ip_addresses_filename, output_filename):
+    def load_ip_ranges(file_path):
+        with open(file_path, 'r') as file:
+            ip_ranges = [ipaddress.ip_network(line.strip()) for line in file]
+        return ip_ranges
+
+    def load_ip_addresses(file_path):
+        with open(file_path, 'r') as file:
+            ip_addresses = [ipaddress.ip_address(line.strip()) for line in file]
+        return ip_addresses
+
+    def save_filtered_ips(file_path, filtered_ips):
+        with open(file_path, 'w') as file:
+            for ip in filtered_ips:
+                file.write(str(ip) + '\n')
+
+    ip_ranges = load_ip_ranges(ip_ranges_filename)
+    ip_addresses = load_ip_addresses(ip_addresses_filename)
+    filtered_ips = [ip for ip in ip_addresses if any(ip in ip_range for ip_range in ip_ranges)]
+    save_filtered_ips(output_filename, filtered_ips)
+
+
 # 主函数
 def main():
     # 判断是否存在IP文件
     if not os.path.exists(ips):
         with open(ips, 'w') as file:
             file.write("")
-    
+
     # 判断是否存在域名文件
     if not os.path.exists(domains):
         with open(domains, 'w') as file:
@@ -193,6 +223,11 @@ def main():
     # 域名解析IP
     perform_dns_lookups(domains, dns_result, ips)
     print("域名 -> IP 已完成")
+
+    # 过滤IP地址
+    filter_ips('ip_range.txt', ips, new_ips)
+    print("IP过滤 已完成")
+
 
 # 程序入口
 if __name__ == '__main__':
